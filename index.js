@@ -2,7 +2,6 @@ const inquirer = require('inquirer');
 const mysql = require('mysql2');
 
 const PORT = 3000;
-// const app = express();
 
 
 // connect to databse
@@ -16,27 +15,7 @@ const db = mysql.createConnection(
     console.log(`Connected to the employees_db database.`)
 )
 
-function addDepartment() {
-    inquirer.prompt([
-        {
-            type: 'input',
-            name: 'name',
-            message: 'What is the name of the deparmtnet?'
-        }
-    ]).then(({name}) =>{
-        db.query(`INSERT INTO departments (name) VALUES ('${name}');`, function (err, results) {
-            if (err) {
-                console.log(err)
-            } else{
-                console.log(`\n---- A department has been added :${name}`);
-            }
-            askWhatToDo();
-        });
-        
-    });
 
-    
-}
 
 function viewAllDepartments(){
     db.query('SELECT * FROM departments ', function (err, results) {
@@ -67,6 +46,112 @@ function viewAllEmployees() {
         console.table(results);
         askWhatToDo() ;
       });  
+}
+
+function viewByManager(){
+    // get manager's id
+    const sql = `SELECT m.id, m.first_name, m.last_name
+    FROM employees AS e 
+    JOIN employees AS m ON e.manager_id = m.id
+    GROUP BY e.manager_id;`
+    db.query(sql, function (err, results) {
+        const managerChoiceArr = results.map(manager => ({value: manager.id, name: manager.first_name+' '+manager.last_name}) )
+        managerChoiceArr.push( {value: 'NULL', name:"No manager"}, {value:'ALL', name:'View all group by manager'})
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'managerId',
+                message: `Which manager's employees do you want to see?`,
+                choices: managerChoiceArr
+            }
+        ]).then(({managerId}) => {
+            console.log(managerId)
+            let findstr =  ``;
+            if (managerId == 'NULL') {
+                findstr = `WHERE e.manager_id IS NULL `;
+            } else if ( managerId == 'ALL') {
+                findstr = `ORDER BY e.manager_id `;
+            } else {
+                findstr =  `WHERE e.manager_id = ? `; 
+            }
+
+            const sql_e = `SELECT e.id, e.first_name AS 'first name', e.last_name AS 'last name', roles.title, departments.name, roles.salary, m.first_name AS 'manager first name', m.last_name AS 'manager last name'
+            FROM employees AS e
+            LEFT JOIN roles ON role_id = roles.id 
+            LEFT JOIN departments ON department_id = departments.id 
+            LEFT JOIN employees AS m ON e.manager_id = m.id
+            ${findstr} ;`;
+
+            db.query(sql_e, [managerId], function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    console.table(results);
+                }
+                askWhatToDo();
+            });
+
+        })
+
+    });  
+}
+
+function viewByDepartment() {
+    // get existing departments id
+    const sql = `SELECT * FROM departments`;
+    db.query(sql, function (err, results) {
+        const deptChoiceArr = results.map(dept => ({value: dept.id, name: dept.name}) );
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'deptId',
+                message: `Which department's employees do you want to see?`,
+                choices: deptChoiceArr
+            }
+        ]).then(({deptId}) => {
+
+            const sql_d = `SELECT e.id, e.first_name AS 'first name', e.last_name AS 'last name', roles.title, departments.name, roles.salary, m.first_name AS 'manager first name', m.last_name AS 'manager last name'
+            FROM employees AS e
+            LEFT JOIN roles ON role_id = roles.id 
+            LEFT JOIN departments ON department_id = departments.id 
+            LEFT JOIN employees AS m ON e.manager_id = m.id 
+            WHERE roles.department_id = ?;`;
+
+            db.query(sql_d, [deptId], function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    console.table(results);
+                }
+                askWhatToDo();
+            });
+
+        })
+
+    })
+}
+
+function addDepartment() {
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'name',
+            message: 'What is the name of the deparmtnet?'
+        }
+    ]).then(({name}) =>{
+        db.query(`INSERT INTO departments (name) VALUES ('${name}');`, function (err, results) {
+            if (err) {
+                console.log(err)
+            } else{
+                console.log(`\n---- A department has been added :${name}`);
+            }
+            askWhatToDo();
+        });
+        
+    });
+
+    
 }
 
 function addRole(){
@@ -198,46 +283,219 @@ function updateRole() {
 
 }
 
+function updateManager() {
+    db.query('SELECT * FROM employees', function (err, result_employees) {
+        const employeeChoiceArr = result_employees.map(person => ({value:person.id, name:person.first_name+' '+person.last_name}))  
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'employeeId',
+                message: "Which employee's manager do you want to update?",
+                choices: employeeChoiceArr
+            },
+            {
+                type: 'list',
+                name: 'managerId',
+                message: "Which manager do you wnat to assign the selected employee?",
+                choices: employeeChoiceArr
+            }
+        ]).then(({employeeId, managerId}) => {
+
+            const sql = `UPDATE employees SET manager_id = ? WHERE id = ?;`;
+
+            db.query(sql, [managerId, employeeId], function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    console.log(`---- Updated employee's manager `);
+                }
+                askWhatToDo();
+            });
+        })
+    
+    });
+}
+
+function deleteDeparmtnet() {
+    // get existing departments id
+    const sql = `SELECT * FROM departments`;
+    db.query(sql, function (err, results) {
+        const deptChoiceArr = results.map(dept => ({value: dept.id, name: dept.name}) );
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'deptId',
+                message: `Which department do you want to delete?`,
+                choices: deptChoiceArr
+            }
+        ]).then(({deptId}) => {
+
+            const sql_d = `DELETE FROM departments WHERE id = ? ;`;
+
+            db.query(sql_d, deptId , function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    if (results.affectedRows === 1){
+                        console.log(`---- A department has been deleted`)
+                    }
+                }
+                askWhatToDo();
+            });
+
+        })
+
+    })    
+}
+
+function deleteRole() {
+    // get existing departments id
+    const sql = `SELECT * FROM roles`;
+    db.query(sql, function (err, results) {
+        const choiceArr = results.map(item => ({value: item.id, name: item.title}) );
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'id',
+                message: `Which role do you want to delete?`,
+                choices: choiceArr
+            }
+        ]).then(({id}) => {
+
+            const sql_d = `DELETE FROM roles WHERE id = ? ;`;
+
+            db.query(sql_d, id , function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    if (results.affectedRows === 1){
+                        console.log(`---- A role has been deleted`)
+                    }
+                }
+                askWhatToDo();
+            });
+
+        })
+
+    })    
+}
+
+function deleteEmployee() {
+    // get existing departments id
+    const sql = `SELECT employees.id AS id, first_name, last_name, title FROM employees LEFT JOIN roles ON role_id = roles.id `;
+    db.query(sql, function (err, results) {
+        // console.log(results)
+        const choiceArr = results.map(item => ({value: item.id, name: item.first_name+' '+item.last_name+' /'+item.title}) );
+
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'id',
+                message: `Which employee do you want to delete?`,
+                choices: choiceArr
+            }
+        ]).then(({id}) => {
+
+            const sql_d = `DELETE FROM employees WHERE id = ? ;`;
+
+            db.query(sql_d, id , function (err, results) {
+                if (err) {
+                    console.log(err)
+                } else{
+                    if (results.affectedRows === 1){
+                        console.log(`---- An employee has been deleted`)
+                    }
+                }
+                askWhatToDo();
+            });
+
+        })
+
+    })    
+}
+
+function viewBudget(){
+    const sql = `SELECT  departments.name AS department, SUM(salary) AS budget
+    FROM employees 
+    LEFT JOIN roles ON role_id = roles.id 
+    LEFT JOIN departments ON department_id = departments.id
+    GROUP BY department_id;`
+
+    db.query(sql, function (err, results) {
+        console.table(results)
+        askWhatToDo();
+    })   
+}
+
 function askWhatToDo() {
+    const whatToDoChoices = [
+        {value:1 , name: "View all departments"},
+        {value:2 , name: "View all roles"},
+        {value:3 , name: "View all employees"},
+        {value:4 , name: "Add a department"},
+        {value:5 , name: "Add a role"},
+        {value:6 , name: "Add an employee"},
+        {value:7 , name: "Update an employee role"},
+        {value:8 , name: "Update employee's manager"},
+        {value:9 , name: "View employees by manager"},
+        {value:10 , name: "View employees by department"},
+        {value:11 , name: "Delete a department"},
+        {value:12 , name: "Delete a role"},
+        {value:13 , name: "Delete an empoloyee"},
+        {value:14 , name: "View the total utilized budget"}
+    ]
     inquirer.prompt([
         {
             type: 'list',
             name: 'toDo',
             message: 'What do you want to do next?',
-            choices: [
-                'View all departments',
-                'View all roles',
-                'View all employees',
-                'Add a department',
-                'Add a role',
-                'Add an employee',
-                'Update an employee role'
-            ]
+            choices: whatToDoChoices 
         }
     ]).then(({toDo}) =>{
         switch(toDo) {
-            case 'View all departments':
+            case 1:
                 viewAllDepartments();
                 break;
-            case 'View all roles':
+            case 2:
                 viewAllRoles()
                 break;
-            case 'View all employees':
+            case 3:
                 viewAllEmployees();
                 break;
-            case 'Add a department':
-                // console.log('Add a department');
+            case 4:
                 addDepartment();
                 break;
-            case 'Add a role':
-                // console.log('Add a role');
+            case 5:
                 addRole();
                 break;
-            case 'Add an employee':
+            case 6:
                 addEmployee();
                 break;
-            case 'Update an employee role':
+            case 7:
                 updateRole();
+                break;
+            case 8:
+                updateManager();
+                break;
+            case 9:
+                viewByManager();
+                break;
+            case 10:
+                viewByDepartment();
+                break;
+            case 11:
+                deleteDeparmtnet();
+                break;
+            case 12:
+                deleteRole();
+                break;
+            case 13:
+                deleteEmployee();
+                break;
+            case 14:
+                viewBudget();
                 break;
             default:
                 console.log('Error: something wrong with select toDo options')
@@ -258,12 +516,4 @@ function init(){
 
 init();
 
-// Default response for any other request (Not Found)
-// app.use((req, res) => {
-//     res.status(404).end();
-// });
-
-// app.listen(PORT, ()=> {
-//     console.log(`Server running on port ${PORT}`)
-// })
 
