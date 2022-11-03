@@ -37,9 +37,10 @@ function viewAllDepartments(){
 
 function viewAllRoles() {
     const sql = 
-    `SELECT roles.id as ID, title as Role, departments.name AS Department, salary AS Salary 
+    `SELECT roles.id as ID, title AS 'Job Title', departments.name AS Department, salary AS Salary 
     FROM roles 
-    LEFT JOIN departments ON department_id = departments.id;`
+    LEFT JOIN departments ON department_id = departments.id
+    ORDER BY department_id;`
     db.query(sql, function (err, results) {
         if (err) throw (err);
         if ( results.length === 0 ) console.log('✴--- No role data exists.')
@@ -50,7 +51,7 @@ function viewAllRoles() {
 
 function viewAllEmployees() {
     const sql = 
-    `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
+    `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS 'Job Title', departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
     FROM employees AS e
     LEFT JOIN roles ON role_id = roles.id 
     LEFT JOIN departments ON department_id = departments.id 
@@ -70,44 +71,49 @@ function viewByManager(){
     JOIN employees AS m ON e.manager_id = m.id
     GROUP BY e.manager_id;`
     db.query(sql, function (err, results) {
-        const managerChoiceArr = results.map(manager => ({value: manager.id, name: manager.first_name+' '+manager.last_name}) )
-        managerChoiceArr.push( {value: 'NULL', name:"No manager"}, {value:'ALL', name:'View all group by manager'})
-        inquirer.prompt([
-            {
-                type: 'list',
-                name: 'managerId',
-                message: `Which manager's employees do you want to see?`,
-                choices: managerChoiceArr
-            }
-        ]).then(({managerId}) => {
-            console.log(managerId)
-            let findstr =  ``;
-            if (managerId == 'NULL') {
-                findstr = `WHERE e.manager_id IS NULL `;
-            } else if ( managerId == 'ALL') {
-                findstr = `ORDER BY e.manager_id `;
-            } else {
-                findstr =  `WHERE e.manager_id = ? `; 
-            }
-
-            const sql_e = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
-            FROM employees AS e
-            LEFT JOIN roles ON role_id = roles.id 
-            LEFT JOIN departments ON department_id = departments.id 
-            LEFT JOIN employees AS m ON e.manager_id = m.id
-            ${findstr} ;`;
-
-            db.query(sql_e, [managerId], function (err, results) {
-                if (err) {
-                    console.log(err)
-                } else{
-                    console.table(results);
+        if (err) console.log(err);
+        if ( results.length === 0 ) {
+            console.log('✴--- No manager exists.');
+            askWhatToDo();
+        } else {
+            const managerChoiceArr = results.map(manager => ({value: manager.id, name: manager.first_name+' '+manager.last_name}) )
+            managerChoiceArr.push( {value: 'NULL', name:"No manager"}, {value:'ALL', name:'View all group by manager'})
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'managerId',
+                    message: `Which manager's employees do you want to see?`,
+                    choices: managerChoiceArr
                 }
-                askWhatToDo();
-            });
+            ]).then(({managerId}) => {
+            
+                let findstr =  ``;
+                if (managerId == 'NULL') {
+                    findstr = `WHERE e.manager_id IS NULL `;
+                } else if ( managerId == 'ALL') {
+                    findstr = `ORDER BY e.manager_id `;
+                } else {
+                    findstr =  `WHERE e.manager_id = ? `; 
+                }
 
-        })
+                const sql_e = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS 'Job Title', departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
+                FROM employees AS e
+                LEFT JOIN roles ON role_id = roles.id 
+                LEFT JOIN departments ON department_id = departments.id 
+                LEFT JOIN employees AS m ON e.manager_id = m.id
+                ${findstr} ;`;
 
+                db.query(sql_e, [managerId], function (err, results) {
+                    if (err) {
+                        console.log(err)
+                    } else{
+                        console.table(results);
+                    }
+                    askWhatToDo();
+                });
+
+            })
+        }
     });  
 }
 
@@ -126,7 +132,7 @@ function viewByDepartment() {
             }
         ]).then(({deptId}) => {
 
-            const sql_d = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
+            const sql_d = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS 'Job Title', departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
             FROM employees AS e
             LEFT JOIN roles ON role_id = roles.id 
             LEFT JOIN departments ON department_id = departments.id 
@@ -263,71 +269,84 @@ function addEmployee() {
 
 function updateRole() {
     db.query('SELECT * FROM employees', function (err, result_employees) {
-        const employeeChoiceArr = result_employees.map(person => ({value:person.id, name:person.first_name+' '+person.last_name}))  
+        if (err) console.log(err);
+        if ( result_employees.length === 0 ) {
+            console.log('✴--- No employee data exists.');
+            askWhatToDo();
+        } else {
 
-        db.query('SELECT * FROM roles ', function (err, results_roles) {
-            const roleChoiceArr = results_roles.map(role => ({value: role.id, name: role.title}) );
+            const employeeChoiceArr = result_employees.map(person => ({value:person.id, name:person.first_name+' '+person.last_name}))  
 
-            inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'employeeId',
-                    message: "-- Which employee's role do you want to update?",
-                    choices: employeeChoiceArr
-                },
-                {
-                    type: 'list',
-                    name: 'roleId',
-                    message: "-- Which role do you want to assign the selected employee?",
-                    choices: roleChoiceArr
-                }
-            ]).then(({employeeId, roleId}) => {
+            db.query('SELECT * FROM roles ', function (err, results_roles) {
+                const roleChoiceArr = results_roles.map(role => ({value: role.id, name: role.title}) );
 
-                const sql = `UPDATE employees SET role_id = ? WHERE id = ?;`;
-                db.query(sql, [roleId, employeeId], function (err, results) {
-                    if (err) {
-                        console.log(err)
-                    } else{
-                        console.log(`✴--- The employee's role has been updated.`);
+                inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'employeeId',
+                        message: "-- Which employee's role do you want to update?",
+                        choices: employeeChoiceArr
+                    },
+                    {
+                        type: 'list',
+                        name: 'roleId',
+                        message: "-- Which role do you want to assign the selected employee?",
+                        choices: roleChoiceArr
                     }
-                    askWhatToDo();
-                });
+                ]).then(({employeeId, roleId}) => {
+
+                    const sql = `UPDATE employees SET role_id = ? WHERE id = ?;`;
+                    db.query(sql, [roleId, employeeId], function (err, results) {
+                        if (err) {
+                            console.log(err)
+                        } else{
+                            console.log(`✴--- The employee's role has been updated.`);
+                        }
+                        askWhatToDo();
+                    });
+                })
             })
-        })
+        }
     });
 
 }
 
 function updateManager() {
     db.query('SELECT * FROM employees', function (err, result_employees) {
-        const employeeChoiceArr = result_employees.map(person => ({value:person.id, name:person.first_name+' '+person.last_name}))  
-        inquirer.prompt([
-            {
-                type: 'list',
-                name: 'employeeId',
-                message: "-- Which employee's manager do you want to update?",
-                choices: employeeChoiceArr
-            },
-            {
-                type: 'list',
-                name: 'managerId',
-                message: "-- Which manager do you wnat to assign the selected employee?",
-                choices: employeeChoiceArr
-            }
-        ]).then(({employeeId, managerId}) => {
+        if (err) console.log(err);
+        if ( result_employees.length === 0 ) {
+            console.log('✴--- No employee data exists.');
+            askWhatToDo();
+        } else {
 
-            const sql = `UPDATE employees SET manager_id = ? WHERE id = ?;`;
-
-            db.query(sql, [managerId, employeeId], function (err, results) {
-                if (err) {
-                    console.log(err)
-                } else{
-                    console.log(`✴--- The employee's manager has been updated.`);
+            const employeeChoiceArr = result_employees.map(person => ({value:person.id, name:person.first_name+' '+person.last_name}))  
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'employeeId',
+                    message: "-- Which employee's manager do you want to update?",
+                    choices: employeeChoiceArr
+                },
+                {
+                    type: 'list',
+                    name: 'managerId',
+                    message: "-- Which manager do you wnat to assign the selected employee?",
+                    choices: employeeChoiceArr
                 }
-                askWhatToDo();
-            });
-        })
-    
+            ]).then(({employeeId, managerId}) => {
+
+                const sql = `UPDATE employees SET manager_id = ? WHERE id = ?;`;
+
+                db.query(sql, [managerId, employeeId], function (err, results) {
+                    if (err) {
+                        console.log(err)
+                    } else{
+                        console.log(`✴--- The employee's manager has been updated.`);
+                    }
+                    askWhatToDo();
+                });
+            })
+        }
     });
 }
 
@@ -375,7 +394,7 @@ function deleteRole() {
     db.query(sql, function (err, results) {
         if (err) console.log(err);
         if ( results.length === 0 ) {
-            console.log('✴--- No department data exists.')
+            console.log('✴--- No role data exists.')
             askWhatToDo();
         } else {
             const choiceArr = results.map(item => ({value: item.id, name: item.title}) );
@@ -413,33 +432,38 @@ function deleteEmployee() {
     // get existing departments id
     const sql = `SELECT employees.id AS id, first_name, last_name, title FROM employees LEFT JOIN roles ON role_id = roles.id `;
     db.query(sql, function (err, results) {
-        // console.log(results)
-        const choiceArr = results.map(item => ({value: item.id, name: item.first_name+' '+item.last_name+' /'+item.title}) );
+        if (err) console.log(err);
+        if ( results.length === 0 ) {
+            console.log('✴--- No employee data exists.');
+            askWhatToDo();
+        } else {
 
-        inquirer.prompt([
-            {
-                type: 'list',
-                name: 'id',
-                message: `-- Which employee do you want to delete?`,
-                choices: choiceArr
-            }
-        ]).then(({id}) => {
+            const choiceArr = results.map(item => ({value: item.id, name: item.first_name+' '+item.last_name+' /'+item.title}) );
 
-            const sql_d = `DELETE FROM employees WHERE id = ? ;`;
-
-            db.query(sql_d, id , function (err, results) {
-                if (err) {
-                    console.log(err)
-                } else{
-                    if (results.affectedRows === 1){
-                        console.log(`✴---  An employee has been deleted`)
-                    }
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'id',
+                    message: `-- Which employee do you want to delete?`,
+                    choices: choiceArr
                 }
-                askWhatToDo();
-            });
+            ]).then(({id}) => {
 
-        })
+                const sql_d = `DELETE FROM employees WHERE id = ? ;`;
 
+                db.query(sql_d, id , function (err, results) {
+                    if (err) {
+                        console.log(err)
+                    } else{
+                        if (results.affectedRows === 1){
+                            console.log(`✴---  An employee has been deleted`)
+                        }
+                    }
+                    askWhatToDo();
+                });
+
+            })
+        }
     })    
 }
 
