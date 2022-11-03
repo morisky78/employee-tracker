@@ -1,8 +1,6 @@
 const inquirer = require('inquirer');
 const mysql = require('mysql2');
-
-const PORT = 3000;
-
+const cTable = require('console.table')
 
 // connect to databse
 const db = mysql.createConnection(
@@ -16,36 +14,53 @@ const db = mysql.createConnection(
 )
 
 
+function answerRequired(input) {
+    if (!input) {
+        return `This field is required!`;
+    } return true;
+}
+
+function isNumber(input) {
+    if ( isNaN(input) || !input) return 'Please enter numeric value for salary.'
+    else return true;
+}
 
 function viewAllDepartments(){
-    db.query('SELECT * FROM departments ', function (err, results) {
-        console.table(results);
+    const sql = 'SELECT * FROM departments ';
+    db.query(sql, function (err, results) {
+        if (err) console.log(err);
+        if ( results.length === 0 ) console.log('✴--- No department data exists.')
+        else console.table(results);
         askWhatToDo() ;
-      });      
+    });      
 }
 
 function viewAllRoles() {
     const sql = 
-    `SELECT roles.id, title, departments.name, salary 
+    `SELECT roles.id as ID, title as Role, departments.name AS Department, salary AS Salary 
     FROM roles 
     LEFT JOIN departments ON department_id = departments.id;`
-    db.query('SELECT roles.id, title, departments.name, salary FROM roles JOIN departments ON department_id = departments.id ', function (err, results) {
-        console.table(results);
+    db.query(sql, function (err, results) {
+        if (err) throw (err);
+        if ( results.length === 0 ) console.log('✴--- No role data exists.')
+        else console.table(results);
         askWhatToDo() ;
-      });  
+    });  
 }
 
 function viewAllEmployees() {
     const sql = 
-    `SELECT e.id, e.first_name AS 'first name', e.last_name AS 'last name', roles.title, departments.name, roles.salary, m.first_name AS 'Manager first name', m.last_name AS 'Manager last name'
+    `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
     FROM employees AS e
     LEFT JOIN roles ON role_id = roles.id 
     LEFT JOIN departments ON department_id = departments.id 
     LEFT JOIN employees AS m ON e.manager_id = m.id;`;
     db.query(sql, function (err, results) {
-        console.table(results);
+        if (err) throw (err);
+        if ( results.length === 0 ) console.log('✴--- No employee data exists.')
+        else console.table(results);
         askWhatToDo() ;
-      });  
+    });  
 }
 
 function viewByManager(){
@@ -75,7 +90,7 @@ function viewByManager(){
                 findstr =  `WHERE e.manager_id = ? `; 
             }
 
-            const sql_e = `SELECT e.id, e.first_name AS 'first name', e.last_name AS 'last name', roles.title, departments.name, roles.salary, m.first_name AS 'manager first name', m.last_name AS 'manager last name'
+            const sql_e = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
             FROM employees AS e
             LEFT JOIN roles ON role_id = roles.id 
             LEFT JOIN departments ON department_id = departments.id 
@@ -111,7 +126,7 @@ function viewByDepartment() {
             }
         ]).then(({deptId}) => {
 
-            const sql_d = `SELECT e.id, e.first_name AS 'first name', e.last_name AS 'last name', roles.title, departments.name, roles.salary, m.first_name AS 'manager first name', m.last_name AS 'manager last name'
+            const sql_d = `SELECT e.id AS ID, e.first_name AS 'First Name', e.last_name AS 'Last Name', roles.title AS Role, departments.name As Department, roles.salary AS Salary, CONCAT_WS(' ', m.first_name, m.last_name) AS Manager
             FROM employees AS e
             LEFT JOIN roles ON role_id = roles.id 
             LEFT JOIN departments ON department_id = departments.id 
@@ -137,15 +152,13 @@ function addDepartment() {
         {
             type: 'input',
             name: 'name',
-            message: 'What is the name of the deparmtnet?'
+            message: '-- What is the name of the department?',
+            validate(input) { return answerRequired(input); } 
         }
     ]).then(({name}) =>{
         db.query(`INSERT INTO departments (name) VALUES ('${name}');`, function (err, results) {
-            if (err) {
-                console.log(err)
-            } else{
-                console.log(`\n---- A department has been added :${name}`);
-            }
+            if (err) throw (err);
+            if (results.affectedRows === 1) console.log(`✴--- The department has been added to the database.`);
             askWhatToDo();
         });
         
@@ -163,17 +176,19 @@ function addRole(){
             {
                 type: 'input',
                 name: 'title',
-                message: 'What is the name of the role?'
+                message: '-- What is the name of the role?',
+                validate(input) { return answerRequired(input); } 
             },
             {
                 type: 'input',
                 name: 'salary',
-                message: 'What is the salary of the role?'
+                message: '-- What is the salary of the role?',
+                validate(input) { return isNumber(input); } 
             },
             {
                 type: 'list',
                 name: 'deptId',
-                message: 'Which department does the role belong to?',
+                message: '-- Which department does the role belong to?',
                 choices: choiceArr
             }
         ]).then(({title, salary, deptId}) => {
@@ -183,7 +198,7 @@ function addRole(){
                 if (err) {
                     console.log(err)
                 } else{
-                    console.log(`---- A role has been added to the database :${title}`);
+                    console.log(`✴--- The role has been added to the database.`);
                 }
                 askWhatToDo();
             });
@@ -205,34 +220,35 @@ function addEmployee() {
                 {
                     type: 'input',
                     name: 'firstName',
-                    message: "What is the employee's first name?"
+                    message: "-- What is the employee's first name?",
+                    validate(input) { return answerRequired(input); } 
                 },
                 {
                     type: 'input',
                     name: 'lastName',
-                    message: "What is the employee's last name?"
+                    message: "-- What is the employee's last name?",
+                    validate(input) { return answerRequired(input); } 
                 },
                 {
                     type: 'list',
                     name: 'roleId',
-                    message: "What is the employee's role?",
+                    message: "-- What is the employee's role?",
                     choices: roleChoiceArr
                 },
                 {
                     type: 'list',
                     name: 'managerId',
-                    message: "What is the employee's manager?",
+                    message: "-- Who is the employee's manager?",
                     choices: managerChoiceArr
                 }
             ]).then(({firstName, lastName, roleId, managerId}) => {
-                // console.log(firstName, lastName, roleId, managerId);
     
                 const sql = `INSERT INTO employees (first_name, last_name, role_id, manager_id ) VALUES (?,?,?,?);`;
                 db.query(sql, [firstName, lastName, roleId, managerId], function (err, results) {
                     if (err) {
                         console.log(err)
                     } else{
-                        console.log(`---- An employee has been added to the database :${firstName} ${lastName} `);
+                        console.log(`✴--- An employee has been added to the database : ${firstName} ${lastName}`);
                     }
                     askWhatToDo();
                 });
@@ -256,24 +272,23 @@ function updateRole() {
                 {
                     type: 'list',
                     name: 'employeeId',
-                    message: "Which employee's role do you want to update?",
+                    message: "-- Which employee's role do you want to update?",
                     choices: employeeChoiceArr
                 },
                 {
                     type: 'list',
                     name: 'roleId',
-                    message: "Which role do you wnat to assign the selected employee?",
+                    message: "-- Which role do you want to assign the selected employee?",
                     choices: roleChoiceArr
                 }
             ]).then(({employeeId, roleId}) => {
 
                 const sql = `UPDATE employees SET role_id = ? WHERE id = ?;`;
-
                 db.query(sql, [roleId, employeeId], function (err, results) {
                     if (err) {
                         console.log(err)
                     } else{
-                        console.log(`---- Updated employee's role `);
+                        console.log(`✴--- The employee's role has been updated.`);
                     }
                     askWhatToDo();
                 });
@@ -290,13 +305,13 @@ function updateManager() {
             {
                 type: 'list',
                 name: 'employeeId',
-                message: "Which employee's manager do you want to update?",
+                message: "-- Which employee's manager do you want to update?",
                 choices: employeeChoiceArr
             },
             {
                 type: 'list',
                 name: 'managerId',
-                message: "Which manager do you wnat to assign the selected employee?",
+                message: "-- Which manager do you wnat to assign the selected employee?",
                 choices: employeeChoiceArr
             }
         ]).then(({employeeId, managerId}) => {
@@ -307,7 +322,7 @@ function updateManager() {
                 if (err) {
                     console.log(err)
                 } else{
-                    console.log(`---- Updated employee's manager `);
+                    console.log(`✴--- The employee's manager has been updated.`);
                 }
                 askWhatToDo();
             });
@@ -320,64 +335,76 @@ function deleteDeparmtnet() {
     // get existing departments id
     const sql = `SELECT * FROM departments`;
     db.query(sql, function (err, results) {
-        const deptChoiceArr = results.map(dept => ({value: dept.id, name: dept.name}) );
+        if (err) console.log(err);
+        if ( results.length === 0 ) {
+            console.log('✴--- No department data exists.');
+            askWhatToDo();
+        } else {
+            const deptChoiceArr = results.map(dept => ({value: dept.id, name: dept.name}) );
 
-        inquirer.prompt([
-            {
-                type: 'list',
-                name: 'deptId',
-                message: `Which department do you want to delete?`,
-                choices: deptChoiceArr
-            }
-        ]).then(({deptId}) => {
-
-            const sql_d = `DELETE FROM departments WHERE id = ? ;`;
-
-            db.query(sql_d, deptId , function (err, results) {
-                if (err) {
-                    console.log(err)
-                } else{
-                    if (results.affectedRows === 1){
-                        console.log(`---- A department has been deleted`)
-                    }
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'deptId',
+                    message: `-- Which department do you want to delete?`,
+                    choices: deptChoiceArr
                 }
-                askWhatToDo();
-            });
+            ]).then(({deptId}) => {
+                const sql_d = `DELETE FROM departments WHERE id = ? ;`;
 
-        })
-
+                db.query(sql_d, deptId , function (err, results) {
+                    if (err) {
+                        console.log(err)
+                    } else{
+                        if (results.affectedRows === 1){
+                            console.log(`✴--- The department has been deleted.`)
+                        }
+                    }
+                    askWhatToDo();
+                });
+                
+            })
+        }
+        
     })    
 }
 
 function deleteRole() {
-    // get existing departments id
+    // get existing roles to display the choices
     const sql = `SELECT * FROM roles`;
     db.query(sql, function (err, results) {
-        const choiceArr = results.map(item => ({value: item.id, name: item.title}) );
-
-        inquirer.prompt([
-            {
-                type: 'list',
-                name: 'id',
-                message: `Which role do you want to delete?`,
-                choices: choiceArr
-            }
-        ]).then(({id}) => {
-
-            const sql_d = `DELETE FROM roles WHERE id = ? ;`;
-
-            db.query(sql_d, id , function (err, results) {
-                if (err) {
-                    console.log(err)
-                } else{
-                    if (results.affectedRows === 1){
-                        console.log(`---- A role has been deleted`)
-                    }
+        if (err) console.log(err);
+        if ( results.length === 0 ) {
+            console.log('✴--- No department data exists.')
+            askWhatToDo();
+        } else {
+            const choiceArr = results.map(item => ({value: item.id, name: item.title}) );
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'id',
+                    message: `-- Which role do you want to delete?`,
+                    choices: choiceArr
                 }
-                askWhatToDo();
-            });
+            ]).then(({id}) => {
 
-        })
+                const sql_d = `DELETE FROM roles WHERE id = ? ;`;
+
+                db.query(sql_d, id , function (err, results) {
+                    if (err) {
+                        console.log(err)
+                    } else{
+                        if (results.affectedRows === 1){
+                            console.log(`✴--- The role has been deleted`)
+                        }
+                    }
+                    askWhatToDo();
+                });
+                
+            })
+
+        }
+       
 
     })    
 }
@@ -393,7 +420,7 @@ function deleteEmployee() {
             {
                 type: 'list',
                 name: 'id',
-                message: `Which employee do you want to delete?`,
+                message: `-- Which employee do you want to delete?`,
                 choices: choiceArr
             }
         ]).then(({id}) => {
@@ -405,7 +432,7 @@ function deleteEmployee() {
                     console.log(err)
                 } else{
                     if (results.affectedRows === 1){
-                        console.log(`---- An employee has been deleted`)
+                        console.log(`✴---  An employee has been deleted`)
                     }
                 }
                 askWhatToDo();
@@ -443,14 +470,14 @@ function askWhatToDo() {
         {value:10 , name: "View employees by department"},
         {value:11 , name: "Delete a department"},
         {value:12 , name: "Delete a role"},
-        {value:13 , name: "Delete an empoloyee"},
+        {value:13 , name: "Delete an employee"},
         {value:14 , name: "View the total utilized budget"}
     ]
     inquirer.prompt([
         {
             type: 'list',
             name: 'toDo',
-            message: 'What do you want to do next?',
+            message: 'What would you like to do?',
             choices: whatToDoChoices 
         }
     ]).then(({toDo}) =>{
@@ -509,7 +536,11 @@ function askWhatToDo() {
 }
 
 function init(){
-    console.log('** Welcome to the employee management systme');
+    console.log(`
+,----------------------------------------------------------,
+|             E M P L O Y E E   M A N A G E R              |
+*----------------------------------------------------------*    
+`);
 
     askWhatToDo();
 }
